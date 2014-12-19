@@ -1,5 +1,5 @@
 //
-//  walkApi.js
+//  walkObjects.js
 //
 //  version 1.003
 //
@@ -42,7 +42,7 @@ Avatar = function() {
 
     // settings
     this.armsFree = this.hydraCheck(); // automatically sets true for Hydra support - temporary fix
-    this.makesFootStepSounds = true;
+    this.makesFootStepSounds = false; // currently disabled by default - see: https://www.youtube.com/watch?v=jlibGTBCtCU
     this.gender = undefined;
     this.setGender = function(gender) {
 
@@ -96,8 +96,9 @@ Avatar = function() {
 
     this.calibrate = function() {
 
-        // measurements are taken three times to ensure accuracy
+        // Bug 1: measurements are taken three times to ensure accuracy - the first result is often too big
         var attempts = 3;
+        var extraAttempts = 0;
 
         do {
             for (var i = 0; i < this.avatarJointNames.length; i++) {
@@ -120,6 +121,13 @@ Avatar = function() {
             }
             this.calibration.hipsToFeet = MyAvatar.getJointPosition("Hips").y - MyAvatar.getJointPosition("RightToeBase").y;
 
+            if (this.calibration.hipsToFeet === 0 && extraAttempts < 100) {
+
+                // Bug 2: Interface can sometimes report zero for hips to feet, so we keep doing it until it's non-zero
+                attempts++;
+                extraAttempts++;
+            }
+
         } while (attempts-- > 1)
     }
 
@@ -129,15 +137,22 @@ Avatar = function() {
         for (var i = 0; i < this.avatarJointNames.length; i++) {
 
             if (i > 17 && i < 34) {
+
                 // right hand fingers
                 MyAvatar.setJointData(this.avatarJointNames[i], Quat.fromPitchYawRollDegrees(16, 0, 0));
+
             } else if (i > 33 && i < 38) {
+
                 // right hand thumb
                 MyAvatar.setJointData(this.avatarJointNames[i], Quat.fromPitchYawRollDegrees(4, 0, 0));
+
             } else if (i > 41 && i < 58) {
+
                 // left hand fingers
                 MyAvatar.setJointData(this.avatarJointNames[i], Quat.fromPitchYawRollDegrees(16, 0, 0));
+
             } else if (i > 57 && i < 62) {
+
                 // left hand thumb
                 MyAvatar.setJointData(this.avatarJointNames[i], Quat.fromPitchYawRollDegrees(4, 0, 0));
             }
@@ -187,7 +202,7 @@ Avatar = function() {
 fingerCounter = (function () {
 
     var _avatarJointNames = MyAvatar.getJointNames();
-    var _fingerPoseCount = 1;
+    var _fingerPoseCount = 0;
 
     return {
 
@@ -234,15 +249,16 @@ fingerCounter = (function () {
                 }
             }
 
-            if (_fingerPoseCount++ > 9) {
+            if (_fingerPoseCount++ > 10) {
 
-                _fingerPoseCount = 1;
+                _fingerPoseCount = 0;
             }
         }
     }
 
-})(); // end fingerPoser object literal
+})(); // end fingerCounter object literal
 
+// 3D throbber whilst loading assets
 LoadingThrobber = function() {
 
     this.intervalTimer = Script.setInterval(function(){
@@ -310,7 +326,7 @@ jsMotor = (function () {
             _update();
         },
 
-        applyBrakes: function() { // aka apply brakes
+        applyBrakes: function() {
 
             // stop the motion quickly
             _motorVelocity = {x:0.0, y:0.0, z:0};
@@ -482,6 +498,7 @@ Motion = function(avatar) {
         } else if (this.direction === RIGHT) {
 
             directedAcceleration = -acceleration.x;
+
         }
 
         if (directedAcceleration < ACCELERATION_THRESHOLD) {
@@ -545,6 +562,7 @@ Motion = function(avatar) {
     this.frequencyTimeWheelRadius = 0.5;
     this.recentFrequencyTimeIncrements = [];
     for(var i = 0; i < 8; i++) {
+
         this.recentFrequencyTimeIncrements.push(0);
     }
     this.averageFrequencyTimeIncrement = 0;
@@ -557,12 +575,14 @@ Motion = function(avatar) {
         this.recentFrequencyTimeIncrements.push(angle);
         this.recentFrequencyTimeIncrements.shift();
         for(increment in this.recentFrequencyTimeIncrements) {
+
             this.averageFrequencyTimeIncrement += this.recentFrequencyTimeIncrements[increment];
         }
         this.averageFrequencyTimeIncrement /= this.recentFrequencyTimeIncrements.length;
 
         this.frequencyTimeWheelPos += angle;
         if (this.frequencyTimeWheelPos >= 360) {
+
             this.frequencyTimeWheelPos = this.frequencyTimeWheelPos % 360;
         }
     }
@@ -584,7 +604,7 @@ animationOperations = (function() {
 
     return {
 
-        // helper function for renderMotion(). calculate joint translations based on animation file settings and frequency * time
+        // calculate joint translations based on animation file settings and frequency * time
         calculateTranslations: function(animation, ft, direction) {
 
             var jointName = "Hips";
@@ -659,7 +679,7 @@ animationOperations = (function() {
             return jointTranslations;
         },
 
-        // helper function for renderMotion(). calculate joint rotations based on animation file settings and frequency * time
+        // calculate joint rotations based on animation file settings and frequency * time
         calculateRotations: function(jointName, animation, ft, direction) {
 
             var joint = animation.joints[jointName];
@@ -677,14 +697,14 @@ animationOperations = (function() {
                 jointRotations.x = modifiers.pitchReverseInvert * (modifiers.pitchSign * joint.pitch *
                     animation.filters[jointName].pitchFilter.calculate
                     (filter.degToRad(ft * modifiers.pitchFrequencyMultiplier +
-                    joint.pitchPhase + modifiers.pitchReverseModifier)) +
+                    joint.pitchPhase + modifiers.pitchPhaseModifier + modifiers.pitchReverseModifier)) +
                     modifiers.pitchOffsetSign * joint.pitchOffset);
 
             } else {
 
                 jointRotations.x = modifiers.pitchReverseInvert * (modifiers.pitchSign * joint.pitch *
                     Math.sin(filter.degToRad(ft * modifiers.pitchFrequencyMultiplier +
-                    joint.pitchPhase + modifiers.pitchReverseModifier)) +
+                    joint.pitchPhase + modifiers.pitchPhaseModifier + modifiers.pitchReverseModifier)) +
                     modifiers.pitchOffsetSign * joint.pitchOffset);
             }
 
@@ -996,6 +1016,7 @@ spatialAwareness = (function () {
 
 })();
 
+
 // holds the current list of live actions being played (separate from actions owned by Transitons)
 liveActions = (function () {
 
@@ -1049,12 +1070,405 @@ liveActions = (function () {
 
 })(); // end liveActions
 
+TransitionParameters = function() {
+
+    this.duration = 0.7;
+    this.actions = [];
+    this.easingLower = {x:0.5, y:0.5};
+    this.easingUpper = {x:0.5, y:0.5};
+}
+
+// constructor for animation Transition
+Transition = function(nextAnimation, lastAnimation, lastTransition, playTransitionActions) {
+
+    if (playTransitionActions === undefined ) {
+        playTransitionActions = true;
+    }
+
+    this.id = motion.transitionCount++; // serial number for this transition
+
+    // record the current state of animation
+    this.nextAnimation = nextAnimation;
+    this.lastAnimation = lastAnimation;
+    this.lastTransition = lastTransition;
+
+    // collect information about the currently playing animation
+    this.direction = motion.direction;
+    this.lastDirection = motion.lastDirection;
+    this.lastFrequencyTimeWheelPos = motion.frequencyTimeWheelPos;
+    this.lastFrequencyTimeIncrement = motion.averageFrequencyTimeIncrement;
+    this.lastFrequencyTimeWheelRadius = motion.frequencyTimeWheelRadius;
+    this.stopAngle = 0; // what angle should we stop turning this frequency time wheel?
+    this.degreesToTurn = 0; // total degrees to turn the ft wheel before the avatar stops (walk only)
+    this.degreesRemaining = 0; // remaining degrees to turn the ft wheel before the avatar stops (walk only)
+    this.lastElapsedFTDegrees = motion.elapsedFTDegrees; // degrees elapsed since last transition start
+    motion.elapsedFTDegrees = 0; // reset ready for the next transtion
+
+    // set the inital parameters for the transition
+    this.parameters = new TransitionParameters();
+    this.liveActions = []; // to be populate with action objects as per action names supplied by TransitionParameters
+
+    if (walkAssets && isDefined(lastAnimation) && isDefined(nextAnimation)) {
+
+        // start up any actions for this transition
+        walkAssets.transitions.getTransitionParameters(lastAnimation, nextAnimation, this.parameters);
+        if (playTransitionActions) {
+
+            for(action in this.parameters.actions) {
+
+                // create the action and add it to this Transition's live actions
+                this.liveActions.push(new Action(this.parameters.actions[action]));
+            }
+        }
+    }
+
+    this.continuedMotionDuration = 0;
+    this.startTime = new Date().getTime(); // Starting timestamp (seconds)
+    this.progress = 0; // how far are we through the transition?
+    this.filteredProgress = 0;
+    this.startLocation = MyAvatar.position;
+
+    // will we need to continue motion? if the motor has been turned on, then we do
+    if (jsMotor.isMotoring()) {
+
+        // decide at which angle we should stop the frequency time wheel
+        var stopAngle = this.lastAnimation.calibration.stopAngleForwards;
+        if (motion.lastDirection === BACKWARDS) {
+
+            stopAngle = this.lastAnimation.calibration.stopAngleBackwards;
+        }
+        var degreesToTurn = 0;
+        var lastFrequencyTimeWheelPos = this.lastFrequencyTimeWheelPos;
+        var lastElapsedFTDegrees = this.lastElapsedFTDegrees;
+
+        var debug = '';
+
+        // set the stop angle depending on which quadrant of the walk cycle we are currently in
+        // and decide whether we need to take an extra step to complete the walk cycle or not
+        if(lastFrequencyTimeWheelPos <= stopAngle && lastElapsedFTDegrees < 180) {
+
+            // we have not taken a complete step yet, so we advance to the second stop angle
+            stopAngle += 180;
+            degreesToTurn = stopAngle  - lastFrequencyTimeWheelPos;
+
+        } else if(lastFrequencyTimeWheelPos > stopAngle && lastFrequencyTimeWheelPos <= stopAngle + 90) {
+
+            // take an extra step to complete the walk cycle and stop at the second stop angle
+            stopAngle += 180;
+            degreesToTurn = stopAngle - lastFrequencyTimeWheelPos;
+
+        } else if(lastFrequencyTimeWheelPos > stopAngle + 90 && lastFrequencyTimeWheelPos <= stopAngle + 180) {
+
+            // stop on the other foot at the second stop angle for this walk cycle
+            stopAngle += 180;
+            degreesToTurn = stopAngle - lastFrequencyTimeWheelPos;
+
+        } else if(lastFrequencyTimeWheelPos > stopAngle + 180 && lastFrequencyTimeWheelPos <= stopAngle + 270) {
+
+            // take an extra step to complete the walk cycle and stop at the first stop angle
+            degreesToTurn = stopAngle + 360 - lastFrequencyTimeWheelPos;
+
+        } else if(lastFrequencyTimeWheelPos <= stopAngle) {
+
+            degreesToTurn = stopAngle - lastFrequencyTimeWheelPos;
+
+        } else {
+
+            degreesToTurn = 360 - lastFrequencyTimeWheelPos + stopAngle;
+        }
+        this.stopAngle = stopAngle;
+        this.degreesToTurn = degreesToTurn;
+        this.degreesRemaining = degreesToTurn;
+
+        // work out the distance we need to cover to complete the cycle
+        var distance = degreesToTurn * avatar.calibration.strideLength / 180;
+
+        this.continuedMotionDuration = distance / MAX_WALK_SPEED;
+
+        // do we need more time to complete the cyccle than the set duration allows?
+        if (this.continuedMotionDuration > this.parameters.duration) {
+
+            this.parameters.duration = this.continuedMotionDuration;
+        }
+    }
+
+    // deal with transition recursion (overlapping transitions)
+    this.recursionDepth = 0;
+    this.incrementRecursion = function() {
+
+        this.recursionDepth += 1;
+
+        // cancel any continued motion
+        this.degreesToTurn = 0;
+
+        if(this.lastTransition !== nullTransition) {
+
+            this.lastTransition.incrementRecursion();
+
+            if(this.lastTransition.recursionDepth > MAX_TRANSITION_RECURSION) {
+
+                this.lastTransition.die();
+                this.lastTransition = nullTransition;
+            }
+        }
+    };
+
+    if(this.lastTransition !== nullTransition) {
+
+        this.lastTransition.incrementRecursion();
+    }
+
+
+    // end of transition initialisation. begin transition public methods
+
+
+    this.advancePreviousFrequencyTimeWheel = function(deltaTime) {
+
+        var wheelAdvance = undefined;
+
+        if (this.lastAnimation === avatar.selectedWalk &&
+            this.nextAnimation === avatar.selectedIdle) {
+
+            if(this.degreesRemaining <= 0) {
+
+                // stop continued motion
+                wheelAdvance = 0;
+                if (jsMotor.isMotoring()) {
+
+                    jsMotor.applyBrakes();
+                }
+
+            } else {
+
+                wheelAdvance = this.degreesRemaining * deltaTime / this.continuedMotionDuration;
+                var distanceToTravel = avatar.calibration.strideLength * wheelAdvance / 180;
+                var MIN_BRAKING_DISTANCE = 0.01;
+
+                if (distanceToTravel < MIN_BRAKING_DISTANCE) {
+
+                    distanceToTravel = 0;
+                    this.degreesRemaining = 0;
+
+                } else {
+
+                    this.degreesRemaining -= wheelAdvance;
+                }
+                var newSpeed = distanceToTravel / deltaTime > MAX_WALK_SPEED ? MAX_WALK_SPEED : distanceToTravel / deltaTime;
+
+                jsMotor.setMotorSpeed(newSpeed, SHORT_TIME);
+            }
+
+        } else {
+
+            wheelAdvance = this.lastFrequencyTimeIncrement;
+        }
+
+        // advance the ft wheel
+        this.lastFrequencyTimeWheelPos += wheelAdvance;
+        if (this.lastFrequencyTimeWheelPos >= 360) {
+
+            this.lastFrequencyTimeWheelPos = this.lastFrequencyTimeWheelPos % 360;
+        }
+
+        // advance ft wheel for the nested (previous) Transition
+        if (this.lastTransition !== nullTransition) {
+
+            this.lastTransition.advancePreviousFrequencyTimeWheel(deltaTime);
+        }
+
+        // update the lastElapsedFTDegrees for short stepping
+        this.lastElapsedFTDegrees += wheelAdvance;
+        this.degreesTurned += wheelAdvance;
+    };
+
+    this.updateProgress = function() {
+
+        var elapasedTime = (new Date().getTime() - this.startTime) / 1000;
+        this.progress = elapasedTime / this.parameters.duration;
+        this.progress = Math.round(this.progress * 1000) / 1000;
+
+        // updated nested transition/s
+        if(this.lastTransition !== nullTransition) {
+
+            if(this.lastTransition.updateProgress() === TRANSITION_COMPLETE) {
+
+                // the previous transition is now complete
+                this.lastTransition.die();
+                this.lastTransition = nullTransition;
+            }
+        }
+
+        // update any actions
+        for(action in this.liveActions) {
+
+            // use independent timing for actions so as not to apply Bezier response above
+            this.liveActions[action].progress += (motion.deltaTime / this.liveActions[action].duration);
+
+            if (this.liveActions[action].progress >= 1) {
+
+                // time to kill off this action
+                this.liveActions.splice(action, 1);
+            }
+        }
+
+        this.filteredProgress = filter.bezier(this.progress, this.parameters.easingLower, this.parameters.easingUpper);
+        return this.progress >= 1 ? TRANSITION_COMPLETE : false;
+    };
+
+    this.blendTranslations = function(frequencyTimeWheelPos, direction) {
+
+        var lastTranslations = {x:0, y:0, z:0};
+        var nextTranslations = animationOperations.calculateTranslations(this.nextAnimation,
+                                                     frequencyTimeWheelPos,
+                                                     direction);
+
+        // are we blending with a previous, still live transition?
+        if(this.lastTransition !== nullTransition) {
+
+            lastTranslations = this.lastTransition.blendTranslations(this.lastFrequencyTimeWheelPos,
+                                                                     this.lastDirection);
+
+        } else {
+
+            lastTranslations = animationOperations.calculateTranslations(this.lastAnimation,
+                                                     this.lastFrequencyTimeWheelPos,
+                                                     this.lastDirection);
+        }
+
+        nextTranslations.x = this.filteredProgress * nextTranslations.x +
+                             (1 - this.filteredProgress) * lastTranslations.x;
+
+        nextTranslations.y = this.filteredProgress * nextTranslations.y +
+                             (1 - this.filteredProgress) * lastTranslations.y;
+
+        nextTranslations.z = this.filteredProgress * nextTranslations.z +
+                             (1 - this.filteredProgress) * lastTranslations.z;
+
+        if (this.liveActions.length > 0) {
+
+            for(action in this.liveActions) {
+
+                var actionStrength = filter.bezier(this.liveActions[action].currentStrength(), {x:1, y:0}, {x:0, y:1});
+                var poseTranslations = animationOperations.calculateTranslations(walkAssets.getReachPose(this.liveActions[action].reachPose),
+                                                             frequencyTimeWheelPos,
+                                                             direction);
+
+                if(Math.abs(poseTranslations.x) > 0) {
+
+                    nextTranslations.x = actionStrength * poseTranslations.x +
+                                        (1 - actionStrength) * nextTranslations.x;
+                }
+
+                if(Math.abs(poseTranslations.y) > 0) {
+
+                    nextTranslations.y = actionStrength * poseTranslations.y +
+                                        (1 - actionStrength) * nextTranslations.y;
+                }
+
+                if(Math.abs(poseTranslations.z) > 0) {
+
+                    nextTranslations.z = actionStrength * poseTranslations.z +
+                                        (1 - actionStrength) * nextTranslations.z;
+                }
+            }
+        }
+
+        return nextTranslations;
+    };
+
+    this.blendRotations = function(jointName, frequencyTimeWheelPos, direction) {
+
+        var lastRotations = {x:0, y:0, z:0};
+        var nextRotations = animationOperations.calculateRotations(jointName,
+                                               this.nextAnimation,
+                                               frequencyTimeWheelPos,
+                                               direction);
+
+        // attenuate transition effects for shorter steps
+        var shortStepAdjust = 1;
+        var SHORT_STEP = 120; // minimum ft wheel degrees turned to define a short step
+
+        if (this.lastAnimation === avatar.selectedWalk &&
+            this.lastElapsedFTDegrees < SHORT_STEP) {
+
+            shortStepAdjust = 1 - ((SHORT_STEP - this.lastElapsedFTDegrees) / SHORT_STEP);
+            shortStepAdjust = filter.bezier(shortStepAdjust, {x:1, y:0}, {x:0, y:1});
+        }
+
+        // are we blending with a previous, still live transition?
+        if(this.lastTransition !== nullTransition) {
+
+            lastRotations = this.lastTransition.blendRotations(jointName,
+                                                               this.lastFrequencyTimeWheelPos,
+                                                               this.lastDirection);
+        } else {
+
+            lastRotations = animationOperations.calculateRotations(jointName,
+                                               this.lastAnimation,
+                                               this.lastFrequencyTimeWheelPos,
+                                               this.lastDirection);
+        }
+
+        nextRotations.x = shortStepAdjust * this.filteredProgress * nextRotations.x +
+                          (1 - shortStepAdjust * this.filteredProgress) * lastRotations.x;
+
+        nextRotations.y = shortStepAdjust * this.filteredProgress * nextRotations.y +
+                          (1 - shortStepAdjust * this.filteredProgress) * lastRotations.y;
+
+        nextRotations.z = shortStepAdjust * this.filteredProgress * nextRotations.z +
+                          (1 - shortStepAdjust * this.filteredProgress) * lastRotations.z;
+
+
+        // are there actions defined for this transition?
+        if (this.liveActions.length > 0) {
+
+            for(action in this.liveActions) {
+
+                var actionStrength = filter.bezier(this.liveActions[action].currentStrength(), {x:1, y:0}, {x:0, y:1});
+                var poseRotations = animationOperations.calculateRotations(jointName,
+                                                       walkAssets.getReachPose(this.liveActions[action].reachPose),
+                                                       frequencyTimeWheelPos,
+                                                       direction);
+                if(Math.abs(poseRotations.x) > 0) {
+
+                    nextRotations.x = shortStepAdjust * actionStrength * poseRotations.x +
+                                     (1 - shortStepAdjust * actionStrength) * nextRotations.x;
+                }
+
+                if(Math.abs(poseRotations.y) > 0) {
+
+                    nextRotations.y = shortStepAdjust * actionStrength * poseRotations.y +
+                                     (1 - shortStepAdjust * actionStrength) * nextRotations.y;
+                }
+
+                if(Math.abs(poseRotations.z) > 0) {
+
+                    nextRotations.z = shortStepAdjust * actionStrength * poseRotations.z +
+                                     (1 - shortStepAdjust * actionStrength) * nextRotations.z;
+                }
+            }
+        }
+
+        return nextRotations;
+    };
+
+    this.die = function() {
+
+        if (jsMotor.isMotoring()) {
+
+            jsMotor.applyBrakes();
+        }
+    };
+
+}; // end Transition constructor
+
 
 // individual joint modiers (mostly used to provide symmetry between left and right limbs)
 JointModifiers = function(joint, direction) {
 
     // gather modifiers and multipliers
     this.pitchFrequencyMultiplier = 1;
+    this.pitchPhaseModifier = 0;
     this.pitchReverseModifier = 0;
     this.yawReverseModifier = 0;
     this.rollReverseModifier = 0;
@@ -1072,6 +1486,11 @@ JointModifiers = function(joint, direction) {
         if (isDefined(joint.pitchFrequencyMultiplier)) {
             this.pitchFrequencyMultiplier = joint.pitchFrequencyMultiplier;
         }
+        if (isDefined(joint.pitchPhaseModifier)) {
+
+            // used to reverse phase of opposing limbs during symmetric animation (e.g. walking)
+            this.pitchPhaseModifier = joint.pitchPhaseModifier;
+        }
         if (isDefined(joint.pitchSign)) {
             this.pitchSign = joint.pitchSign;
         }
@@ -1082,10 +1501,12 @@ JointModifiers = function(joint, direction) {
             this.rollSign = joint.rollSign;
         }
         if (isDefined(joint.pitchReverseInvert) && direction === BACKWARDS) {
+
             // used to flip an animation curve (used on feet pitch curves)
             this.pitchReverseInvert = joint.pitchReverseInvert;
         }
         if (isDefined(joint.pitchReverseModifier) && direction === BACKWARDS) {
+
             // used to reverse symmetric animations (e.g. walk backwards)
             this.pitchReverseModifier = joint.pitchReverseModifier;
         }
@@ -1094,9 +1515,6 @@ JointModifiers = function(joint, direction) {
         }
         if (isDefined(joint.rollReverseModifier) && direction === BACKWARDS) {
             this.rollReverseModifier = joint.rollReverseModifier;
-        }
-        if (isDefined(joint.pitchOffsetSign)) {
-            this.pitchOffsetSign = joint.pitchOffsetSign;
         }
         if (isDefined(joint.bobReverseModifier) && direction === BACKWARDS) {
             this.bobReverseModifier = joint.bobReverseModifier;

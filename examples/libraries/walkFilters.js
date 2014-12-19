@@ -175,7 +175,7 @@ WaveSynth = function(waveShape, numHarmonics, smoothing) {
             }
         }
 
-        // smooth result and return
+        // smooth the result and return
         return this.smoothingFilter.process(harmonics);
     };
 };

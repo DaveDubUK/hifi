@@ -3,7 +3,8 @@
 //
 //  version 1.2, Winter 2014
 //
-//  Created by David Wooldridge
+//  Design and coding: David Wooldridge
+//  Animation advisor: Ozan Serim
 //
 //  Animates an avatar using procedural animation techniques
 //
@@ -41,7 +42,7 @@ var FAST_DECELERATION_THRESHOLD = 150; // detect flying to stop
 var GRAVITY_THRESHOLD = 3.0; // height above voxel surface where gravity kicks in
 var ON_SURFACE_THRESHOLD = 0.1; // height above voxel surface to be considered as on the surface
 var ANGULAR_ACCELERATION_MAX = 75; // rad/s/s
-var MAX_TRANSITION_RECURSION = 4; // how many nested transtions are permitted
+var MAX_TRANSITION_RECURSION = 10; // how many nested transtions are permittedz
 
 // assets location
 var pathToAssets = 'http://s3.amazonaws.com/hifi-public/procedural-animator/v1.2/assets/';
@@ -57,9 +58,6 @@ Script.include("./libraries/walkInterface.js");
 
 // load filters (Bezier, Butterworth, harmonics, averaging)
 Script.include("./libraries/walkFilters.js");
-
-// load transition constructor
-Script.include("./libraries/walkTransition.js");
 
 // load the assets
 Script.include(pathToAssets + "walkAssets.js");
@@ -144,8 +142,7 @@ function determineLocomotionMode() {
                        avatar.isAtWalkingSpeed &&
                        avatar.isAccelerating &&
                        !jsMotor.isMotoring() &&
-                       motion.direction !== DOWN &&
-                       motion.direction !== UP) {
+                       motion.direction !== DOWN && motion.direction !== UP) {
 
                 locomotionMode = state.WALKING;
 
@@ -410,6 +407,7 @@ function selectAnimation() {
             }
             break;
         }
+
     } // end switch(locomotionMode)
 }
 
@@ -609,6 +607,7 @@ function getLeanRoll() {
     // factor in both angular and linear speeds
     var linearContribution = 0;
     if(motion.speed > 0) {
+
         linearContribution = (Math.log(motion.speed / TOP_SPEED) + 8) / 8;
     }
     var angularContribution = Math.abs(angularSpeed) / motion.calibration.angularVelocityMax;
@@ -620,12 +619,12 @@ function getLeanRoll() {
 
     // which way to lean?
     var turnSign = -1;
-    if (angularSpeed < 0.001) {
+    var MIN_ANGULAR_SPEED = 0.001;
+    if (angularSpeed < MIN_ANGULAR_SPEED) {
 
         turnSign = 1;
     }
-    if (motion.direction === BACKWARDS ||
-        motion.direction === LEFT) {
+    if (motion.direction === BACKWARDS || motion.direction === LEFT) {
 
         turnSign *= -1;
     }
@@ -676,7 +675,8 @@ function renderMotion() {
         for (action in liveActions.actions) {
 
             var actionStrength = filter.bezier(liveActions.actions[action].currentStrength(), {x:1, y:0}, {x:0, y:1});
-            var poseTranslations = animationOperations.calculateTranslations(walkAssets.getReachPose(liveActions.actions[action].reachPose),
+            var poseTranslations = animationOperations.calculateTranslations(
+                                                         walkAssets.getReachPose(liveActions.actions[action].reachPose),
                                                          motion.frequencyTimeWheelPos,
                                                          motion.direction);
             if(Math.abs(poseTranslations.x) > 0) {
