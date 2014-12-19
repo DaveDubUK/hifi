@@ -5,7 +5,7 @@
 //
 //  Created by David Wooldridge, Autumn 2014
 //
-//  Provides a variety of filters for use by the walk.js script v1.12
+//  Provides a variety of filters for use by the walk.js script v1.2
 //
 //  Distributed under the Apache License, Version 2.0.
 //  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
@@ -17,6 +17,7 @@ AveragingFilter = function(length) {
     this.pastValues = [];
 
     for(var i = 0; i < length; i++) {
+
         this.pastValues.push(0);
     }
 
@@ -43,58 +44,60 @@ AveragingFilter = function(length) {
     };
 };
 
-
-// 1st order Butterworth filter - calculate coeffs here: http://www-users.cs.york.ac.uk/~fisher/mkfilter/trad.html
-// provides LP filtering with a more stable frequency / phase response (-3 dB @ 3 Hz)
-ButterworthFilter1 = function() {
-
-    this.gain = 7.313751515;
-    this.coeff = 0.7265425280;
-
-    // initialise the arrays
-    this.xv = [];
-    this.yv = [];
-
-    for(var i = 0; i < 2; i++) {
-
-        this.xv.push(0);
-        this.yv.push(0);
-    }
-
-    // process values
-    this.process = function(nextInputValue) {
-
-        this.xv[0] = this.xv[1];
-        this.xv[1] = nextInputValue / this.gain;
-
-        this.yv[0] = this.yv[1];
-        this.yv[1] = this.xv[0] + this.xv[1] + this.coeff * this.yv[0];
-
-        return this.yv[1];
-    };
-
-}; // end Butterworth filter constructor
-
 // 2nd order Butterworth LP filter - calculate coeffs here: http://www-users.cs.york.ac.uk/~fisher/mkfilter/trad.html
 // provides LP filtering with a more stable frequency / phase response
 ButterworthFilter2 = function(cutOff) {
 
     switch(cutOff) {
 
+        case 2:
+
+            this.gain = 104.9784742;
+            this.coeffOne = -0.7436551950;
+            this.coeffTwo = 1.7055521455;
+            break;
+
+        case 3:
+
+            this.gain = 49.79245121;
+            this.coeffOne = -0.6413515381;
+            this.coeffTwo = 1.5610180758;
+            break;
+
         case 5:
-        default:
 
             this.gain = 20.20612010;
             this.coeffOne = -0.4775922501;
             this.coeffTwo = 1.2796324250;
             break;
+
+        case 10:
+
+            this.gain = 6.449489743;
+            this.coeffOne = -0.2404082058;
+            this.coeffTwo = 0.6202041029;
+            break;
+
+        case 20:
+
+            this.gain = 2.149829914;
+            this.coeffOne = -0.2404082058;
+            this.coeffTwo = 0.6202041029;
+            break;
+
+        case 30:
+
+            this.gain = 1.000000074;
+            this.coeffOne = -0.9999998519;
+            this.coeffTwo = -1.9999998519;
+            break;
+
     }
 
     // initialise the arrays
     this.xv = [];
     this.yv = [];
     for(var i = 0; i < 3; i++) {
-
         this.xv.push(0);
         this.yv.push(0);
     }
@@ -115,7 +118,7 @@ ButterworthFilter2 = function(cutOff) {
 
         return this.yv[2];
     };
-}; // end Butterworth filter constructor
+}; // end Butterworth filter contructor
 
 
 // Add harmonics to a given sine wave to form square, sawtooth or triangle waves
@@ -172,7 +175,7 @@ WaveSynth = function(waveShape, numHarmonics, smoothing) {
             }
         }
 
-        // smooth the result and return
+        // smooth result and return
         return this.smoothingFilter.process(harmonics);
     };
 };
@@ -195,9 +198,12 @@ HarmonicsFilter = function(magnitudes, phaseAngles) {
     };
 };
 
-
-// the main filter object
+// the main filter object literal
 filter = (function() {
+
+    // Bezier private variables
+    var _C1 = {x:0, y:0};
+    var _C4 = {x:1, y:1};
 
     // Bezier private functions
     function _B1(t) { return t * t * t };
@@ -227,12 +233,6 @@ filter = (function() {
             return newAveragingFilter;
         },
 
-        createButterworthFilter1: function() {
-
-            var newButterworthFilter = new ButterworthFilter1();
-            return newButterworthFilter;
-        },
-
         createButterworthFilter2: function(cutoff) {
 
             var newButterworthFilter = new ButterworthFilter2(cutoff);
@@ -253,17 +253,18 @@ filter = (function() {
 
 
         // the following filters do not need separate instances, as they hold no previous values
-        bezier: function(percent, C1, C2, C3, C4) {
+        bezier: function(input, C2, C3) {
 
             // Bezier functions for more natural transitions
             // based on script by Dan Pupius (www.pupius.net) http://13thparallel.com/archive/bezier-curves/
+            input = 1 - input;
             var pos = {x: 0, y: 0};
-            pos.x = C1.x * _B1(percent) + C2.x * _B2(percent) + C3.x * _B3(percent) + C4.x * _B4(percent);
-            pos.y = C1.y * _B1(percent) + C2.y * _B2(percent) + C3.y * _B3(percent) + C4.y * _B4(percent);
-            return pos;
+            pos.x = _C1.x * _B1(input) + C2.x * _B2(input) + C3.x * _B3(input) + _C4.x * _B4(input);
+            pos.y = _C1.y * _B1(input) + C2.y * _B2(input) + C3.y * _B3(input) + _C4.y * _B4(input);
+            return pos.y;
         },
 
-        // simple clipping filter (clips bottom of wave only)
+        // simple clipping filter (clips bottom of wave only, special case for hips y-axis skeleton offset)
         clipTrough: function(inputValue, peak, strength) {
 
             var outputValue = inputValue * strength;

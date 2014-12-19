@@ -5,7 +5,7 @@
 //
 //  Created by David Wooldridge, Autumn 2014
 //
-//  Presents the UI for the walk.js script v1.12
+//  Presents the UI for the walk.js script v1.2
 //
 //  Distributed under the Apache License, Version 2.0.
 //  See the accompanying file LICENSE or http://www.apache.org/licenses/LICENSE-2.0.html
@@ -14,8 +14,9 @@
 walkInterface = (function() {
 
     // references to walk.js objects
-    var _motion = null;
+    var _state = null;
     var _walkAssets = null;
+    var _avatar = null;
 
     // controller UI element positions and dimensions
     var _backgroundWidth = 350;
@@ -23,6 +24,10 @@ walkInterface = (function() {
     var _backgroundX = Window.innerWidth - _backgroundWidth - 58;
     var _backgroundY = Window.innerHeight / 2 - _backgroundHeight / 2;
     var _bigButtonsY = 348;
+
+    // built in camera
+    var cameraMode = 0;
+    var originalCameraMode = Camera.getModeString();
 
     // Load up the overlays
     var _buttonOverlays = [];
@@ -188,7 +193,7 @@ walkInterface = (function() {
             Overlays.editOverlay(_offButton, {visible: !minimise});
 
         }
-        if (_motion.avatarGender === FEMALE) {
+        if (_avatar.avatarGender === FEMALE) {
 
             Overlays.editOverlay(_femaleButtonSelected, {visible: !minimise});
             Overlays.editOverlay(_femaleButton, {visible: false});
@@ -202,7 +207,7 @@ walkInterface = (function() {
             Overlays.editOverlay(_maleButtonSelected, {visible: !minimise});
             Overlays.editOverlay(_maleButton, {visible: false});
         }
-        if (_motion.armsFree) {
+        if (_avatar.armsFree) {
 
             Overlays.editOverlay(_armsFreeButtonSelected, {visible: !minimise});
             Overlays.editOverlay(_armsFreeButton, {visible: false});
@@ -212,7 +217,7 @@ walkInterface = (function() {
             Overlays.editOverlay(_armsFreeButtonSelected, {visible: false});
             Overlays.editOverlay(_armsFreeButton, {visible: !minimise});
         }
-        if (_motion.makesFootStepSounds) {
+        if (_avatar.makesFootStepSounds) {
 
             Overlays.editOverlay(_footstepsButtonSelected, {visible: !minimise});
             Overlays.editOverlay(_footstepsButton, {visible: false});
@@ -262,14 +267,14 @@ walkInterface = (function() {
 
             case _footstepsButton:
 
-                _motion.makesFootStepSounds = true;
+                _avatar.makesFootStepSounds = true;
                 Overlays.editOverlay(_footstepsButtonSelected, {visible: true});
                 Overlays.editOverlay(_footstepsButton, {visible: false});
                 return;
 
             case _footstepsButtonSelected:
 
-                _motion.makesFootStepSounds = false;
+                _avatar.makesFootStepSounds = false;
                 Overlays.editOverlay(_footstepsButton, {visible: true});
                 Overlays.editOverlay(_footstepsButtonSelected, {visible: false});
                 return;
@@ -277,7 +282,7 @@ walkInterface = (function() {
             case _femaleButton:
             case _maleButtonSelected:
 
-                _motion.setGender(FEMALE);
+                _avatar.setGender(FEMALE);
                 Overlays.editOverlay(_femaleButtonSelected, {visible: true});
                 Overlays.editOverlay(_femaleButton, {visible: false});
                 Overlays.editOverlay(_maleButton, {visible: true});
@@ -287,7 +292,7 @@ walkInterface = (function() {
             case _maleButton:
             case _femaleButtonSelected:
 
-                _motion.setGender(MALE);
+                _avatar.setGender(MALE);
                 Overlays.editOverlay(_femaleButton, {visible: true});
                 Overlays.editOverlay(_femaleButtonSelected, {visible: false});
                 Overlays.editOverlay(_maleButtonSelected, {visible: true});
@@ -296,22 +301,77 @@ walkInterface = (function() {
 
             case _armsFreeButton:
 
-                _motion.armsFree = true;
+                _avatar.armsFree = true;
                 Overlays.editOverlay(_armsFreeButtonSelected, {visible: true});
                 Overlays.editOverlay(_armsFreeButton, {visible: false});
                 return;
 
             case _armsFreeButtonSelected:
 
-                _motion.armsFree = false;
-                _motion.poseFingers();
+                _avatar.armsFree = false;
+                _avatar.poseFingers();
                 Overlays.editOverlay(_armsFreeButtonSelected, {visible: false});
                 Overlays.editOverlay(_armsFreeButton, {visible: true});
                 return;
         }
     };
 
+    // advanced editing
+    function keyPressEvent(event) {
+
+        if (event.text == '1') {
+
+            Camera.mode = "first person";
+            cameraMode = 1;
+
+        } else if (event.text == '2') {
+
+            Camera.mode = "mirror";
+            cameraMode = 2;
+
+        } else if (event.text == '3') {
+
+            Camera.mode = "third person";
+            cameraMode = 3;
+
+        } else if (event.text == '4') {
+
+            Camera.mode = "independent";
+            cameraMode = 4;
+
+        } else if (event.text == '5') {
+
+            Camera.mode = "independent";
+            cameraMode = 5;
+
+        }  else if (event.text == '0') {
+
+            Camera.mode = originalCameraMode;
+            cameraMode = 0;
+
+        } else if (event.text == ')') {
+
+            liveActions.addAction(new Action("ShrugRP"));
+        }
+    };
+
+    Controller.keyPressEvent.connect(keyPressEvent);
     Controller.mousePressEvent.connect(mousePressEvent);
+
+    Script.update.connect(function(deltaTime) {
+
+        if(cameraMode === 5) {
+
+            var aviPosition = MyAvatar.position;
+            var translationOffset = {x: 0, y: 0, z: 5};
+            var newCamPos = Vec3.sum(translationOffset, aviPosition);
+            Camera.setPosition(newCamPos);
+            Camera.setOrientation({x:0, y:0, z:0, w:1});
+        }
+
+        // make sure the minimise overlay stays in place
+        Overlays.editOverlay(_controlsMinimisedTab, {x: Window.innerWidth - 58, y: Window.innerHeight - 145});
+    });
 
     // delete overlays on script ending
     Script.scriptEnding.connect(function() {
@@ -328,11 +388,11 @@ walkInterface = (function() {
     return {
 
         // gather references to objects from the walk.js script
-        initialise: function(state, motion, walkAssets) {
+        initialise: function(state, walkAssets, avatar) {
 
             _state = state;
-            _motion = motion;
             _walkAssets = walkAssets;
+            _avatar = avatar;
         }
 
     }; // end public methods (return)
