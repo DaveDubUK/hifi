@@ -130,7 +130,7 @@ static QTimer* idleTimer = NULL;
 const QString CHECK_VERSION_URL = "https://highfidelity.io/latestVersion.xml";
 const QString SKIP_FILENAME = QStandardPaths::writableLocation(QStandardPaths::DataLocation) + "/hifi.skipversion";
 
-const QString DEFAULT_SCRIPTS_JS_URL = "http://public.highfidelity.io/scripts/defaultScripts.js";
+const QString DEFAULT_SCRIPTS_JS_URL = "http://s3.amazonaws.com/hifi-public/scripts/defaultScripts.js";
 
 void messageHandler(QtMsgType type, const QMessageLogContext& context, const QString& message) {
     QString logMessage = LogHandler::getInstance().printMessage((LogMsgType) type, context, message);
@@ -309,13 +309,6 @@ Application::Application(int& argc, char** argv, QElapsedTimer &startup_time) :
     // use our MyAvatar position and quat for address manager path
     addressManager.setPositionGetter(getPositionForPath);
     addressManager.setOrientationGetter(getOrientationForPath);
-    
-    // handle domain change signals from AddressManager
-    connect(&addressManager, &AddressManager::possibleDomainChangeRequiredToHostname,
-            this, &Application::changeDomainHostname);
-    
-    connect(&addressManager, &AddressManager::possibleDomainChangeRequiredViaICEForID,
-            &domainHandler, &DomainHandler::setIceServerHostnameAndID);
 
     _settings = new QSettings(this);
     _numChangedSettings = 0;
@@ -537,8 +530,6 @@ void Application::initializeGL() {
     } else {
         isInitialized = true;
     }
-    int argc = 0;
-    glutInit(&argc, 0);
     #endif
 
     #ifdef WIN32
@@ -1435,7 +1426,7 @@ void Application::dropEvent(QDropEvent *event) {
     SnapshotMetaData* snapshotData = Snapshot::parseSnapshotData(snapshotPath);
     if (snapshotData) {
         if (!snapshotData->getDomain().isEmpty()) {
-            changeDomainHostname(snapshotData->getDomain());
+            NodeList::getInstance()->getDomainHandler().setHostnameAndPort(snapshotData->getDomain());
         }
 
         _myAvatar->setPosition(snapshotData->getLocation());
@@ -3576,7 +3567,7 @@ void Application::renderViewFrustum(ViewFrustum& viewFrustum) {
             glPushMatrix();
             glColor4f(1, 1, 0, 1);
             glTranslatef(position.x, position.y, position.z); // where we actually want it!
-            glutWireSphere(keyholeRadius, 20, 20);
+            DependencyManager::get<GeometryCache>()->renderSphere(keyholeRadius, 20, 20, false); 
             glPopMatrix();
         }
     }
@@ -3635,16 +3626,6 @@ void Application::setMenuShortcutsEnabled(bool enabled) {
     setShortcutsEnabled(_window->menuBar(), enabled);
 }
 
-void Application::uploadModel(ModelType modelType) {
-    ModelUploader* uploader = new ModelUploader(modelType);
-    QThread* thread = new QThread();
-    thread->connect(uploader, SIGNAL(destroyed()), SLOT(quit()));
-    thread->connect(thread, SIGNAL(finished()), SLOT(deleteLater()));
-    uploader->connect(thread, SIGNAL(started()), SLOT(send()));
-
-    thread->start();
-}
-
 void Application::updateWindowTitle(){
 
     QString buildVersion = " (build " + applicationVersion() + ")";
@@ -3698,19 +3679,6 @@ void Application::updateLocationInServer() {
         accountManager.authenticatedRequest("/api/v1/user/location", QNetworkAccessManager::PutOperation,
                                             JSONCallbackParameters(), QJsonDocument(rootObject).toJson());
      }
-}
-
-void Application::changeDomainHostname(const QString &newDomainHostname) {
-    NodeList* nodeList = NodeList::getInstance();
-    
-    if (!nodeList->getDomainHandler().isCurrentHostname(newDomainHostname)) {
-        // tell the MyAvatar object to send a kill packet so that it dissapears from its old avatar mixer immediately
-        _myAvatar->sendKillAvatar();
-        
-        // call the domain hostname change as a queued connection on the nodelist
-        QMetaObject::invokeMethod(&NodeList::getInstance()->getDomainHandler(), "setHostname",
-                                  Q_ARG(const QString&, newDomainHostname));
-    }
 }
 
 void Application::clearDomainOctreeDetails() {
@@ -4213,15 +4181,19 @@ void Application::toggleRunningScriptsWidget() {
 }
 
 void Application::uploadHead() {
-    uploadModel(HEAD_MODEL);
+    ModelUploader::uploadHead();
 }
 
 void Application::uploadSkeleton() {
-    uploadModel(SKELETON_MODEL);
+    ModelUploader::uploadSkeleton();
 }
 
 void Application::uploadAttachment() {
-    uploadModel(ATTACHMENT_MODEL);
+    ModelUploader::uploadAttachment();
+}
+
+void Application::uploadEntity() {
+    ModelUploader::uploadEntity();
 }
 
 void Application::openUrl(const QUrl& url) {

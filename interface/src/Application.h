@@ -335,7 +335,6 @@ signals:
     void importDone();
 
 public slots:
-    void changeDomainHostname(const QString& newDomainHostname);
     void domainChanged(const QString& domainHostname);
     void updateWindowTitle();
     void updateLocationInServer();
@@ -375,6 +374,7 @@ public slots:
     void uploadHead();
     void uploadSkeleton();
     void uploadAttachment();
+    void uploadEntity();
     
     void openUrl(const QUrl& url);
 
@@ -459,8 +459,6 @@ private:
     void eyedropperVoxelUnderCursor();
 
     void setMenuShortcutsEnabled(bool enabled);
-
-    void uploadModel(ModelType modelType);
 
     static void attachNewHeadToNode(Node *newNode);
     static void* networkReceive(void* args); // network receive thread
